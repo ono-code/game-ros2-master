@@ -1,0 +1,1304 @@
+<!DOCTYPE html>
+<html lang="id" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ROS2 Master: Konsep Arsitektur & Simulasi Robotika</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        ros: {
+                            red: '#E02227',
+                            darkred: '#8D0B0F',
+                            cyan: '#00F0FF',
+                            blue: '#3B82F6',
+                            purple: '#8B5CF6',
+                            bg: '#090D16',
+                            card: '#111827',
+                            border: '#1F2937',
+                            terminal: '#030712'
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Plus Jakarta Sans', 'sans-serif'],
+                        mono: ['Fira Code', 'monospace']
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #030712;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #1f2937;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #374151;
+        }
+
+        .glow-cyan {
+            box-shadow: 0 0 20px rgba(0, 240, 255, 0.2);
+        }
+        .glow-red {
+            box-shadow: 0 0 20px rgba(224, 34, 39, 0.25);
+        }
+        .node-pulse {
+            animation: pulse-ring 2s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+        }
+        @keyframes pulse-ring {
+            0% { transform: scale(0.95); opacity: 0.8; }
+            50% { transform: scale(1.05); opacity: 1; }
+            100% { transform: scale(0.95); opacity: 0.8; }
+        }
+
+        /* Glassmorphism styling */
+        .glass-panel {
+            background: rgba(17, 24, 39, 0.75);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+    </style>
+</head>
+<body class="bg-ros-bg text-slate-100 font-sans min-h-screen flex flex-col justify-between selection:bg-cyan-500 selection:text-black">
+
+    <!-- Header Navigation -->
+    <header class="border-b border-slate-800/80 bg-slate-950/80 backdrop-blur-md sticky top-0 z-50 px-4 py-3">
+        <div class="max-w-7xl mx-auto flex flex-wrap justify-between items-center gap-4">
+            
+            <!-- Brand Logo & Title -->
+            <div class="flex items-center gap-3">
+                <div class="p-2.5 bg-gradient-to-tr from-rose-600 via-ros-red to-orange-500 rounded-2xl shadow-lg shadow-rose-950/60 flex items-center justify-center">
+                    <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L5.6 15.12a2 2 0 00-1.18.117l-1.02.408a1 1 0 00-.598.927V18.5a1 1 0 001 1h16a1 1 0 001-1v-1.892a1 1 0 00-.572-.907l-.972-.428zM12 3v6m0 0l-3-3m3 3l3-3"/>
+                    </svg>
+                </div>
+                <div>
+                    <h1 class="font-extrabold text-lg leading-tight flex items-center gap-2">
+                        ROS 2 Architect <span class="text-xs font-mono bg-cyan-950 text-cyan-400 border border-cyan-800 px-2 py-0.5 rounded-full">SIMULASI & EDUTAINMENT</span>
+                    </h1>
+                    <p class="text-xs text-slate-400">Pembelajaran Interaktif Arsitektur DDS, Node, Topic, Service, Action & TF2</p>
+                </div>
+            </div>
+
+            <!-- Global Telemetry & Level Selector -->
+            <div class="flex items-center gap-4 sm:gap-6 flex-wrap">
+                <!-- View Mode Switcher -->
+                <div class="bg-slate-900 p-1 border border-slate-800 rounded-xl flex items-center gap-1 text-xs font-medium">
+                    <button id="btn-view-sim" onclick="switchViewMode('sim')" class="px-3 py-1.5 rounded-lg bg-cyan-600 text-white font-semibold transition-all">
+                        🤖 Robot Sim
+                    </button>
+                    <button id="btn-view-graph" onclick="switchViewMode('graph')" class="px-3 py-1.5 rounded-lg text-slate-400 hover:text-white transition-all">
+                        🌐 Node Graph
+                    </button>
+                    <button id="btn-view-split" onclick="switchViewMode('split')" class="px-3 py-1.5 rounded-lg text-slate-400 hover:text-white transition-all hidden md:block">
+                        ⚡ Split View
+                    </button>
+                </div>
+
+                <!-- XP & Score Badge -->
+                <div class="bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-1.5 flex items-center gap-3">
+                    <div>
+                        <div class="text-[10px] text-slate-400 uppercase font-bold tracking-wider">XP Skor</div>
+                        <div id="player-xp" class="font-mono font-extrabold text-cyan-400 text-sm">0 XP</div>
+                    </div>
+                    <div class="w-px h-6 bg-slate-800"></div>
+                    <div>
+                        <div class="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Level</div>
+                        <div id="level-indicator" class="font-mono font-extrabold text-amber-400 text-sm">1 / 5</div>
+                    </div>
+                </div>
+
+                <!-- Audio Toggle -->
+                <button id="sound-btn" onclick="toggleAudio()" class="p-2.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-xl text-slate-300 transition-colors" title="Buka/Tutup Suara SFX">
+                    <svg id="sound-icon-on" class="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"/>
+                    </svg>
+                    <svg id="sound-icon-off" class="w-5 h-5 hidden text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Level Wizard Bar -->
+    <main class="max-w-7xl w-full mx-auto p-4 md:p-6 flex-1 flex flex-col gap-6">
+
+        <nav class="bg-slate-900/80 border border-slate-800 rounded-2xl p-3 shadow-xl">
+            <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2" id="level-stepper">
+                <!-- Dynamically populated level steps -->
+            </div>
+        </nav>
+
+        <!-- Main Interactive Workspace -->
+        <div id="main-workspace" class="grid grid-cols-1 lg:grid-cols-12 gap-6 flex-1">
+
+            <!-- Left Panel: Instruction, Concept Analogy & Objectives (5 Cols) -->
+            <div class="lg:col-span-5 flex flex-col gap-5">
+                
+                <!-- Stage Info Card -->
+                <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl flex-1 flex flex-col justify-between relative overflow-hidden">
+                    <div class="absolute -right-10 -bottom-10 w-40 h-40 bg-rose-500/5 rounded-full blur-2xl pointer-events-none"></div>
+
+                    <div>
+                        <!-- Level Tag & Title -->
+                        <div class="flex items-center gap-2 mb-3">
+                            <span id="level-badge" class="bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 text-xs font-mono font-bold px-2.5 py-1 rounded-lg">
+                                LEVEL 1: NODES & TOPICS
+                            </span>
+                            <span id="concept-type-tag" class="bg-purple-500/10 text-purple-400 border border-purple-500/30 text-[10px] font-mono px-2 py-0.5 rounded">
+                                Pub / Sub Pattern
+                            </span>
+                        </div>
+
+                        <h2 id="level-title" class="font-extrabold text-xl text-white mb-2">
+                            Komunikasi Sensor & Motor via Topic ROS 2
+                        </h2>
+
+                        <p id="level-description" class="text-sm text-slate-300 leading-relaxed mb-4">
+                            Node dalam ROS 2 berkomunikasi secara asinkron menggunakan sistem **Publish/Subscribe** melalui saluran yang dinamakan **Topic**. Sensor LiDAR mengirim data ke topik `/scan`, dan pengontrol motor menerima arahan dari topik `/cmd_vel`.
+                        </p>
+
+                        <!-- TEI / Mechatronics Analogy Box -->
+                        <div class="bg-slate-950/80 border-l-4 border-cyan-500 rounded-r-xl p-3.5 mb-4">
+                            <div class="text-xs font-bold text-cyan-400 uppercase tracking-wide flex items-center gap-1.5 mb-1">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                Analogi Teknik Elektronika & Mekatronika:
+                            </div>
+                            <p id="level-analogy" class="text-xs text-slate-300 italic leading-normal">
+                                Ibarat bus data komunikasi CAN-Bus atau UART RS485 di pabrik. Node Sensor mempublikasikan sinyal tanpa perlu tahu siapa pembacanya, dan Node Motor mendengarkan topik kecepatan secara mandiri.
+                            </p>
+                        </div>
+
+                        <!-- Objective & Mission Checklist -->
+                        <div class="bg-slate-800/40 border border-slate-700/50 rounded-xl p-3.5 space-y-2">
+                            <div class="text-xs font-bold text-amber-400 flex items-center gap-1.5 uppercase tracking-wider">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                Misi Tantangan Level Ini:
+                            </div>
+                            <ul id="mission-checklist" class="text-xs text-slate-300 font-mono space-y-1.5">
+                                <!-- Populated dynamically -->
+                            </ul>
+                        </div>
+                    </div>
+
+                    <!-- Actions & Controls -->
+                    <div class="mt-5 pt-3 border-t border-slate-800 flex justify-between items-center gap-2">
+                        <button onclick="showHintModal()" class="text-xs text-slate-400 hover:text-amber-400 flex items-center gap-1 transition-colors">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 01-2 2h-1a2 2 0 01-2-2v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
+                            Petunjuk Mentor ROS 2
+                        </button>
+
+                        <button id="btn-next-level" onclick="nextLevel()" disabled class="px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 disabled:opacity-30 disabled:cursor-not-allowed text-slate-950 font-extrabold text-xs rounded-xl shadow-lg transition-all flex items-center gap-1.5">
+                            Selesaikan & Lanjut
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Dynamic Interactive Controls / Parameters Tool Card -->
+                <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-lg">
+                    <div class="text-xs font-bold text-slate-300 mb-2.5 flex items-center justify-between">
+                        <span class="flex items-center gap-1.5">
+                            <svg class="w-4 h-4 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"/></svg>
+                            Panel Kontrol Interaktif (Tuning & Service Trigger):
+                        </span>
+                    </div>
+                    <div id="interactive-tool-panel" class="space-y-3 text-xs font-mono">
+                        <!-- Dynamically generated controls based on level -->
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- Right Panel: Robot Simulation / ROS2 Architecture Canvas & Terminal (7 Cols) -->
+            <div class="lg:col-span-7 flex flex-col gap-4">
+                
+                <!-- Main Canvas Workspace Box -->
+                <div class="bg-slate-950 border border-slate-800 rounded-2xl shadow-2xl relative overflow-hidden flex flex-col h-[380px] group">
+                    
+                    <!-- Canvas Top Status Bar -->
+                    <div class="bg-slate-900/90 border-b border-slate-800 px-4 py-2 flex items-center justify-between z-10 backdrop-blur-sm">
+                        <div class="flex items-center gap-2">
+                            <span id="status-live-dot" class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                            <span id="canvas-view-title" class="text-xs font-mono font-bold text-slate-200">
+                                Simulasi Robot AMR (Gudang Otonom)
+                            </span>
+                        </div>
+                        <div id="sim-telemetry-badge" class="text-[10px] font-mono bg-slate-950 border border-slate-800 px-2.5 py-0.5 rounded-md text-cyan-400 flex items-center gap-2">
+                            <span>Topic: /cmd_vel</span>
+                            <span>v: 0.00 | w: 0.00</span>
+                        </div>
+                    </div>
+
+                    <!-- Render Canvas (2D Robot Physics & ROS Node Graph) -->
+                    <div class="relative flex-1 w-full h-full bg-ros-bg">
+                        <!-- 2D Robot Simulation Canvas -->
+                        <canvas id="robot-canvas" width="600" height="320" class="w-full h-full object-cover block cursor-crosshair"></canvas>
+                        
+                        <!-- Visual Node Graph Canvas Overlay (Switchable) -->
+                        <canvas id="graph-canvas" width="600" height="320" class="w-full h-full object-cover absolute inset-0 hidden pointer-events-auto bg-slate-950/95"></canvas>
+
+                        <!-- Teleop D-Pad Overlay (Mobile / Touch Friendly) -->
+                        <div id="teleop-overlay" class="absolute bottom-3 right-3 bg-slate-900/90 p-2 rounded-2xl border border-slate-800 backdrop-blur-md z-20 flex flex-col items-center gap-1 shadow-2xl">
+                            <div class="text-[9px] font-mono text-slate-400 font-bold mb-0.5">TELEOP /cmd_vel</div>
+                            <button onmousedown="handleTeleopStart('up')" onmouseup="handleTeleopStop()" ontouchstart="handleTeleopStart('up')" ontouchend="handleTeleopStop()" class="w-8 h-8 bg-slate-800 hover:bg-slate-700 active:bg-cyan-600 text-white rounded-xl text-xs font-bold transition-all shadow">▲</button>
+                            <div class="flex gap-1">
+                                <button onmousedown="handleTeleopStart('left')" onmouseup="handleTeleopStop()" ontouchstart="handleTeleopStart('left')" ontouchend="handleTeleopStop()" class="w-8 h-8 bg-slate-800 hover:bg-slate-700 active:bg-cyan-600 text-white rounded-xl text-xs font-bold transition-all shadow">◄</button>
+                                <button onmousedown="handleTeleopStart('down')" onmouseup="handleTeleopStop()" ontouchstart="handleTeleopStart('down')" ontouchend="handleTeleopStop()" class="w-8 h-8 bg-slate-800 hover:bg-slate-700 active:bg-cyan-600 text-white rounded-xl text-xs font-bold transition-all shadow">▼</button>
+                                <button onmousedown="handleTeleopStart('right')" onmouseup="handleTeleopStop()" ontouchstart="handleTeleopStart('right')" ontouchend="handleTeleopStop()" class="w-8 h-8 bg-slate-800 hover:bg-slate-700 active:bg-cyan-600 text-white rounded-xl text-xs font-bold transition-all shadow">►</button>
+                            </div>
+                        </div>
+
+                        <!-- Canvas Reset / Quick Buttons -->
+                        <div class="absolute top-3 right-3 z-20 flex gap-2">
+                            <button onclick="resetRobotPosition()" class="px-2 py-1 bg-slate-900/80 hover:bg-slate-800 border border-slate-700 text-slate-300 text-[10px] font-mono rounded-lg transition-all backdrop-blur-sm">
+                                🔄 Reset Posisi
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Interactive ROS 2 CLI Shell Terminal -->
+                <div class="bg-ros-terminal border border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col h-[220px]">
+                    <!-- Shell Bar -->
+                    <div class="bg-slate-950 border-b border-slate-800 px-4 py-2 flex items-center justify-between">
+                        <div class="flex items-center gap-2">
+                            <span class="w-2.5 h-2.5 rounded-full bg-rose-500 inline-block"></span>
+                            <span class="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block"></span>
+                            <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block"></span>
+                            <span class="ml-2 text-xs font-mono text-slate-400 flex items-center gap-1.5">
+                                <svg class="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                                ros2-humble-cli@robot-amr:~
+                            </span>
+                        </div>
+                        <div class="text-[10px] font-mono text-slate-500">DDS Middleware: CycloneDDS</div>
+                    </div>
+
+                    <!-- Output Console Window -->
+                    <div id="terminal-screen" class="p-3 font-mono text-[11px] overflow-y-auto flex-1 flex flex-col gap-1.5 leading-relaxed selection:bg-cyan-900">
+                        <div class="text-slate-500">ROS 2 Humble Hawksbill Environment Initialized.</div>
+                        <div class="text-slate-500">Ketik perintah `ros2 node list` atau klik tombol cepat di bawah.</div>
+                        <div class="text-slate-700">----------------------------------------------------</div>
+                    </div>
+
+                    <!-- Command Input Field -->
+                    <div class="bg-slate-950 border-t border-slate-800 p-2.5 flex items-center gap-2">
+                        <span class="font-mono text-xs text-cyan-400 font-bold">ros2@amr:~$</span>
+                        <input type="text" id="terminal-input" autocomplete="off" spellcheck="false" placeholder="Ketik perintah ros2..." 
+                            class="flex-1 bg-transparent font-mono text-xs text-white focus:outline-none placeholder:text-slate-600"
+                            onkeydown="handleTerminalKeyPress(event)">
+                        <button onclick="submitTerminalInput()" class="px-3 py-1 bg-cyan-600 hover:bg-cyan-500 text-slate-950 font-mono text-xs font-bold rounded-lg transition-colors">
+                            EXEC
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Quick Command Palette Buttons -->
+                <div id="quick-cmd-palette" class="flex flex-wrap gap-2 text-xs">
+                    <!-- Populated dynamically per level -->
+                </div>
+
+            </div>
+
+        </div>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="border-t border-slate-800 bg-slate-950/60 py-3 px-4 text-center text-xs text-slate-500">
+        <p>ROS 2 Architect & Sim &copy; 2026 - Modul Edukasi Robotika Industri & System Integration (SMK TEI & Politeknik)</p>
+    </footer>
+
+    <!-- Hint Modal Box -->
+    <div id="hint-modal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-slate-900 border border-slate-700 rounded-2xl max-w-md w-full p-6 shadow-2xl relative">
+            <div class="flex items-center gap-2.5 text-amber-400 font-bold text-base mb-3">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 01-2 2h-1a2 2 0 01-2-2v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
+                Petunjuk Mentor ROS 2
+            </div>
+            <p id="hint-modal-text" class="text-xs text-slate-300 leading-relaxed mb-6 font-mono bg-slate-950 p-3 rounded-xl border border-slate-800">
+                Gunakan panduan instruksi level.
+            </p>
+            <div class="flex justify-end">
+                <button onclick="closeHintModal()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white font-semibold text-xs rounded-xl transition-colors">
+                    Mengerti
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Final Level Completion / Master Certificate Modal -->
+    <div id="completion-modal" class="fixed inset-0 bg-slate-950/90 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-slate-900 border border-cyan-500/40 rounded-3xl max-w-2xl w-full p-6 md:p-8 shadow-2xl text-center relative overflow-hidden">
+            <div class="absolute -top-12 -right-12 w-48 h-48 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none"></div>
+            
+            <div class="w-16 h-16 bg-gradient-to-tr from-cyan-500 to-blue-600 rounded-2xl mx-auto flex items-center justify-center mb-4 shadow-lg shadow-cyan-950/50">
+                <svg class="w-8 h-8 text-slate-950" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
+            </div>
+
+            <h2 class="text-2xl font-extrabold text-white mb-2">Selamat! Kamu Menguasai ROS 2 Architecture!</h2>
+            <p class="text-xs sm:text-sm text-slate-300 max-w-md mx-auto mb-6">
+                Kamu telah menyelesaikan seluruh modul konsep & tantangan robotika: Nodes, Topics, Services, Actions, Parameters, dan TF2 Frame Transforms!
+            </p>
+
+            <!-- Summary Box -->
+            <div class="bg-slate-950 border border-slate-800 rounded-2xl p-4 mb-6 text-left font-mono text-xs space-y-2">
+                <div class="flex justify-between border-b border-slate-800 pb-2">
+                    <span class="text-slate-400">Gelar Kelulusan:</span>
+                    <span class="text-cyan-400 font-bold">ROS 2 System Integrator & Robotics Engineer</span>
+                </div>
+                <div class="flex justify-between border-b border-slate-800 pb-2">
+                    <span class="text-slate-400">Total Skor Pengalaman:</span>
+                    <span id="final-xp-score" class="text-amber-400 font-bold">1000 XP</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-slate-400">Status Navigasi AMR:</span>
+                    <span class="text-emerald-400 font-bold">FULL AUTONOMOUS & SLAM READY</span>
+                </div>
+            </div>
+
+            <div class="flex justify-center gap-3">
+                <button onclick="resetWholeGame()" class="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold rounded-xl transition-colors">
+                    Ulangi Pembelajaran
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        /* Audio Engine (Synthesizer via Web Audio API) */
+        let audioCtx = null;
+        let isAudioEnabled = true;
+
+        function initAudioEngine() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+        }
+
+        function playSynthSound(type) {
+            if (!isAudioEnabled) return;
+            initAudioEngine();
+            if (!audioCtx) return;
+
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            const t = audioCtx.currentTime;
+
+            if (type === 'click') {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(800, t);
+                gain.gain.setValueAtTime(0.04, t);
+                gain.gain.exponentialRampToValueAtTime(0.001, t + 0.04);
+                osc.start(t);
+                osc.stop(t + 0.04);
+            } else if (type === 'success') {
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(523.25, t); // C5
+                osc.frequency.exponentialRampToValueAtTime(1046.50, t + 0.15); // C6
+                gain.gain.setValueAtTime(0.12, t);
+                gain.gain.exponentialRampToValueAtTime(0.001, t + 0.2);
+                osc.start(t);
+                osc.stop(t + 0.2);
+            } else if (type === 'error') {
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(150, t);
+                osc.frequency.setValueAtTime(100, t + 0.08);
+                gain.gain.setValueAtTime(0.15, t);
+                gain.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
+                osc.start(t);
+                osc.stop(t + 0.18);
+            } else if (type === 'level') {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(440, t); // A4
+                osc.frequency.setValueAtTime(554.37, t + 0.08); // C#5
+                osc.frequency.setValueAtTime(659.25, t + 0.16); // E5
+                osc.frequency.setValueAtTime(880, t + 0.24); // A5
+                gain.gain.setValueAtTime(0.15, t);
+                gain.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
+                osc.start(t);
+                osc.stop(t + 0.35);
+            }
+        }
+
+        function toggleAudio() {
+            isAudioEnabled = !isAudioEnabled;
+            document.getElementById('sound-icon-on').classList.toggle('hidden', !isAudioEnabled);
+            document.getElementById('sound-icon-off').classList.toggle('hidden', isAudioEnabled);
+        }
+
+        const levelsData = [
+            {
+                id: 1,
+                title: "Nodes & Topics (Publishers & Subscribers)",
+                conceptTag: "Pub / Sub Pattern",
+                description: "Node adalah unit komputasi independen di ROS 2. Node berkomunikasi mengirim pesan (Messages) melalui saluran dinamakan Topic. Di level ini, sambungkan node sensor LiDAR ke node penggerak `/cmd_vel` untuk mengantar robot melewati rintangan gudang!",
+                analogy: "Sama seperti komunikasi bus data CAN-Bus atau UART RS485. Node Sensor mempublikasikan data tanpa perlu peduli siapa penerimanya.",
+                hint: "1. Jalankan `ros2 topic list` untuk melihat daftar topik aktif.\n2. Aktifkan Mode Teleop atau Hubungkan Node Sensor ke `/cmd_vel` lewat tombol di bawah.\n3. Pandu AMR menembus rintangan hingga ke Zona Doking Hijau!",
+                missions: [
+                    { text: "Lakukan pengamatan topik dengan `ros2 topic list`", done: false },
+                    { text: "Kemudikan AMR hingga menyentuh Doking Station Hijau", done: false }
+                ],
+                quickCommands: [
+                    "ros2 node list",
+                    "ros2 topic list",
+                    "ros2 topic echo /scan",
+                    "ros2 topic pub /cmd_vel geometry_msgs/msg/Twist \"{linear: {x: 1.0}}\""
+                ],
+                nodeGraphNodes: [
+                    { id: 'node_lidar', label: '/lidar_node', type: 'publisher', x: 80, y: 100 },
+                    { id: 'node_nav', label: '/teleop_keyboard', type: 'publisher', x: 80, y: 220 },
+                    { id: 'node_controller', label: '/motion_controller', type: 'subscriber', x: 380, y: 160 }
+                ],
+                nodeGraphTopics: [
+                    { from: 'node_lidar', to: 'node_controller', name: '/scan', msgType: 'sensor_msgs/LaserScan' },
+                    { from: 'node_nav', to: 'node_controller', name: '/cmd_vel', msgType: 'geometry_msgs/Twist' }
+                ],
+                robotStart: { x: 60, y: 160, angle: 0 },
+                goalZone: { x: 520, y: 160, r: 35 },
+                obstacles: [
+                    { x: 200, y: 40, w: 30, h: 140, type: 'wall' },
+                    { x: 340, y: 140, w: 30, h: 140, type: 'wall' }
+                ]
+            },
+            {
+                id: 2,
+                title: "ROS 2 Services (Synchronous Request / Response)",
+                conceptTag: "Request / Response",
+                description: "Berbeda dengan Topic yang sifatnya terus-menerus (streaming), Service digunakan untuk aksi 1-kali panggilan (Synchronous Call) seperti pemicuan sakelar, pengereman darurat, atau pembukaan pintu gerbang otomatis.",
+                analogy: "Ibarat fungsi API Request/Response HTTP atau Interrupt Service Routine (ISR) pada mikrokontroler. Klien mengirim Request, Server memproses dan mengembalikan Response.",
+                hint: "Pintu otomatis gudang terkunci! Gunakan panggilan service `/trigger_gate` untuk membuka pintu penghalang sebelum waktu habis.",
+                missions: [
+                    { text: "Periksa service aktif dengan `ros2 service list`", done: false },
+                    { text: "Panggil service `/trigger_gate` untuk membuka gerbang", done: false },
+                    { text: "Kemudikan robot melewati gerbang ke Doking Station", done: false }
+                ],
+                quickCommands: [
+                    "ros2 service list",
+                    "ros2 service call /trigger_gate std_srvs/srv/Trigger",
+                    "ros2 topic echo /gate_status"
+                ],
+                nodeGraphNodes: [
+                    { id: 'node_client', label: '/agv_teleop_client', type: 'client', x: 100, y: 160 },
+                    { id: 'node_service', label: '/gate_controller_server', type: 'server', x: 380, y: 160 }
+                ],
+                nodeGraphTopics: [
+                    { from: 'node_client', to: 'node_service', name: '/trigger_gate', msgType: 'std_srvs/srv/Trigger (Req/Res)' }
+                ],
+                robotStart: { x: 60, y: 160, angle: 0 },
+                goalZone: { x: 520, y: 160, r: 35 },
+                obstacles: [
+                    { x: 260, y: 30, w: 25, h: 260, type: 'gate', gateOpen: false }
+                ]
+            },
+            {
+                id: 3,
+                title: "ROS 2 Actions (Goal, Feedback, Result)",
+                conceptTag: "Action Client / Server",
+                description: "Action cocok untuk tugas berdurasi panjang seperti Navigasi Otonom Nav2 (`NavigateToPose`). Action memiliki 3 komponen: Goal (Tujuan), Feedback (Laporan Progres Realtime), dan Result (Hasil Akhir), serta dapat dibatalkan (Cancel/Preempt) kapan saja!",
+                analogy: "Ibarat memesan Taksi Online / Kurir. Kamu mengirim Goal alamat, menerima Feedback posisi kendaraan secara berkala, dan bisa membatalkan (Cancel) jika ada kondisi darurat.",
+                hint: "1. Kirim Nav2 Goal Pose menggunakan tombol Action Goal.\n2. amati laporan Feedback sisa jarak (`distance_remaining`).\n3. Jika rintangan dinamis muncul, gunakan Cancel Goal!",
+                missions: [
+                    { text: "Kirim Goal pose navigasi ke `/navigate_to_pose`", done: false },
+                    { text: "Amati Feedback progress penurunan sisa jarak", done: false },
+                    { text: "Capai target lokasi tanpa menabrak rintangan", done: false }
+                ],
+                quickCommands: [
+                    "ros2 action list",
+                    "ros2 action send_goal /navigate_to_pose nav2_msgs/action/NavigateToPose \"{pose: {x: 520, y: 160}}\"",
+                    "ros2 node info /controller_server"
+                ],
+                nodeGraphNodes: [
+                    { id: 'node_action_client', label: '/nav2_bt_navigator', type: 'client', x: 80, y: 160 },
+                    { id: 'node_action_server', label: '/nav2_planner', type: 'server', x: 380, y: 160 }
+                ],
+                nodeGraphTopics: [
+                    { from: 'node_action_client', to: 'node_action_server', name: '/navigate_to_pose', msgType: 'Action (Goal/Feedback/Result)' }
+                ],
+                robotStart: { x: 60, y: 220, angle: 0 },
+                goalZone: { x: 500, y: 80, r: 35 },
+                obstacles: [
+                    { x: 200, y: 120, w: 180, h: 30, type: 'wall' },
+                    { x: 380, y: 0, w: 30, h: 200, type: 'wall' }
+                ]
+            },
+            {
+                id: 4,
+                title: "ROS 2 Parameters & Real-Time Dynamic Reconfigure",
+                conceptTag: "Dynamic Parameters",
+                description: "Parameter adalah nilai konfigurasi Key-Value tiap node (misal: `max_speed`, `pid_kp`, `lidar_cutoff`). Di level ini, AMR mengalami pembatasan kecepatan terlalu rendah. Ubah nilai parameter `max_linear_vel` secara realtime agar robot dapat menanjak jalur lintasan cepat!",
+                analogy: "Sama seperti menyetel potensiometer tuning gain PID controller pada inverter daya atau servo driver motor tanpa perlu kompilasi ulang kode.",
+                hint: "1. Cek parameter aktif `ros2 param list`.\n2. Naikkan `max_linear_vel` dari `0.5` ke `2.5` melalui slider panel atau perintah CLI.\n3. Kemudikan AMR melintasi jalur cepat dalam batas waktu!",
+                missions: [
+                    { text: "Lihat parameter node dengan `ros2 param list`", done: false },
+                    { text: "Set nilai `max_linear_vel` menjadi 2.5", done: false },
+                    { text: "Selesaikan lintasan cepat ke zona Doking", done: false }
+                ],
+                quickCommands: [
+                    "ros2 param list",
+                    "ros2 param get /motion_controller max_linear_vel",
+                    "ros2 param set /motion_controller max_linear_vel 2.5"
+                ],
+                nodeGraphNodes: [
+                    { id: 'node_param_server', label: '/motion_controller', type: 'server', x: 240, y: 160 }
+                ],
+                nodeGraphTopics: [],
+                robotStart: { x: 50, y: 160, angle: 0 },
+                goalZone: { x: 530, y: 160, r: 35 },
+                obstacles: [
+                    { x: 160, y: 0, w: 20, h: 110, type: 'wall' },
+                    { x: 160, y: 210, w: 20, h: 110, type: 'wall' },
+                    { x: 340, y: 80, w: 20, h: 160, type: 'wall' }
+                ]
+            },
+            {
+                id: 5,
+                title: "TF2 Frame Transforms & SLAM Sensor Fusion",
+                conceptTag: "TF2 Coordinate Trees",
+                description: "Arsitektur TF2 mengelola hubungan kerangka koordinat transformasi spatio-temporal (`map` -> `odom` -> `base_link` -> `laser_frame`). Jika sensor LiDAR terpasang miring/salah orientasi offset, titik pantulan laser akan melenceng! Kalibrasi rotasi TF2 sensor laser agar SLAM memetakan lorong dengan akurat.",
+                analogy: "Ibarat konversi koordinat GPS Global ke koordinat lokal Robot, atau transformasi matriks Kinematika Maju (Forward Kinematics) pada Lengan Robot Industri 6-Axis.",
+                hint: "Frame `laser_frame` mengalami miskalibrasi rotasi offset (-45°). Putar slider offset rotasi TF2 ke 0° agar pantulan laser LiDAR lurus presisi, lalu navigasikan robot!",
+                missions: [
+                    { text: "Cek pohon hierarki kerangka transformasi dengan `ros2 run tf2_ros tf2_echo`", done: false },
+                    { text: "Kalibrasi Offset Rotasi Laser TF2 menjadi 0°", done: false },
+                    { text: "Navigasi robot menembus labirin gelap menuju Doking", done: false }
+                ],
+                quickCommands: [
+                    "ros2 run tf2_ros tf2_echo odom base_link",
+                    "ros2 topic echo /tf",
+                    "ros2 param set /tf_broadcaster laser_yaw_offset 0.0"
+                ],
+                nodeGraphNodes: [
+                    { id: 'node_tf', label: '/tf2_broadcaster', type: 'publisher', x: 100, y: 100 },
+                    { id: 'node_amcl', label: '/amcl_slam_node', type: 'subscriber', x: 360, y: 160 }
+                ],
+                nodeGraphTopics: [
+                    { from: 'node_tf', to: 'node_amcl', name: '/tf (map->odom->base_link->laser_frame)', msgType: 'tf2_msgs/TFMessage' }
+                ],
+                robotStart: { x: 60, y: 60, angle: 0 },
+                goalZone: { x: 510, y: 250, r: 35 },
+                obstacles: [
+                    { x: 140, y: 0, w: 25, h: 220, type: 'wall' },
+                    { x: 280, y: 100, w: 25, h: 220, type: 'wall' },
+                    { x: 410, y: 0, w: 25, h: 220, type: 'wall' }
+                ]
+            }
+        ];
+
+        let currentLevelIdx = 0;
+        let playerXP = 0;
+        let activeViewMode = 'sim'; // 'sim', 'graph', 'split'
+
+        // Robot Physics State
+        const robotState = {
+            x: 60,
+            y: 160,
+            radius: 16,
+            angle: 0, // radians
+            linearVel: 0,
+            angularVel: 0,
+            maxLinearVel: 1.8,
+            maxAngularVel: 0.08,
+            lidarRange: 100,
+            lidarRaysCount: 20,
+            tfLaserOffsetAngle: -0.8, // Radian offset for level 5 (-45 deg)
+            isGateOpen: false,
+            actionActive: false,
+            actionTarget: null
+        };
+
+        let currentActiveKey = null;
+
+        /* Switch UI View Modes */
+        function switchViewMode(mode) {
+            playSynthSound('click');
+            activeViewMode = mode;
+            
+            const btnSim = document.getElementById('btn-view-sim');
+            const btnGraph = document.getElementById('btn-view-graph');
+            const btnSplit = document.getElementById('btn-view-split');
+
+            btnSim.className = mode === 'sim' ? "px-3 py-1.5 rounded-lg bg-cyan-600 text-white font-semibold transition-all" : "px-3 py-1.5 rounded-lg text-slate-400 hover:text-white transition-all";
+            btnGraph.className = mode === 'graph' ? "px-3 py-1.5 rounded-lg bg-cyan-600 text-white font-semibold transition-all" : "px-3 py-1.5 rounded-lg text-slate-400 hover:text-white transition-all";
+            btnSplit.className = mode === 'split' ? "px-3 py-1.5 rounded-lg bg-cyan-600 text-white font-semibold transition-all hidden md:block" : "px-3 py-1.5 rounded-lg text-slate-400 hover:text-white transition-all hidden md:block";
+
+            const robotCanvas = document.getElementById('robot-canvas');
+            const graphCanvas = document.getElementById('graph-canvas');
+            const viewTitle = document.getElementById('canvas-view-title');
+
+            if (mode === 'sim') {
+                robotCanvas.classList.remove('hidden');
+                graphCanvas.classList.add('hidden');
+                viewTitle.innerText = "Simulasi Live Robot AMR (Gudang Otonom)";
+            } else if (mode === 'graph') {
+                robotCanvas.classList.add('hidden');
+                graphCanvas.classList.remove('hidden');
+                viewTitle.innerText = "Visualisasi Arsitektur ROS 2 Node Graph (RQT Graph)";
+            } else if (mode === 'split') {
+                robotCanvas.classList.remove('hidden');
+                graphCanvas.classList.remove('hidden');
+                graphCanvas.style.opacity = '0.45';
+                viewTitle.innerText = "Split View: Robot Sim & Visual DDS Node Graph";
+            }
+        }
+
+        const robotCanvas = document.getElementById('robot-canvas');
+        const robotCtx = robotCanvas ? robotCanvas.getContext('2d') : null;
+
+        const graphCanvas = document.getElementById('graph-canvas');
+        const graphCtx = graphCanvas ? graphCanvas.getContext('2d') : null;
+
+        /* Teleop Control Handlers */
+        function handleTeleopStart(dir) {
+            currentActiveKey = dir;
+            playSynthSound('click');
+        }
+
+        function handleTeleopStop() {
+            currentActiveKey = null;
+            robotState.linearVel = 0;
+            robotState.angularVel = 0;
+        }
+
+        // Global Keyboard Handler
+        window.addEventListener('keydown', (e) => {
+            if (document.activeElement.tagName === 'INPUT') return;
+            if (['ArrowUp', 'KeyW'].includes(e.code)) handleTeleopStart('up');
+            if (['ArrowDown', 'KeyS'].includes(e.code)) handleTeleopStart('down');
+            if (['ArrowLeft', 'KeyA'].includes(e.code)) handleTeleopStart('left');
+            if (['ArrowRight', 'KeyD'].includes(e.code)) handleTeleopStart('right');
+        });
+
+        window.addEventListener('keyup', (e) => {
+            if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'KeyW', 'KeyS', 'KeyA', 'KeyD'].includes(e.code)) {
+                handleTeleopStop();
+            }
+        });
+
+        function calculateLiDARScan(level) {
+            const hits = [];
+            const step = (Math.PI * 1.5) / robotState.lidarRaysCount;
+            const startAngle = robotState.angle - (Math.PI * 0.75) + (level.id === 5 ? robotState.tfLaserOffsetAngle : 0);
+
+            for (let i = 0; i < robotState.lidarRaysCount; i++) {
+                const rayAngle = startAngle + (i * step);
+                let hitDist = robotState.lidarRange;
+
+                for (let r = 0; r < robotState.lidarRange; r += 5) {
+                    const rx = robotState.x + Math.cos(rayAngle) * r;
+                    const ry = robotState.y + Math.sin(rayAngle) * r;
+
+                    let hit = false;
+                    level.obstacles.forEach(obs => {
+                        if (obs.type === 'gate' && robotState.isGateOpen) return; // Open gate allows rays through
+                        if (rx >= obs.x && rx <= obs.x + obs.w && ry >= obs.y && ry <= obs.y + obs.h) {
+                            hitDist = r;
+                            hit = true;
+                        }
+                    });
+
+                    // Canvas boundary hits
+                    if (rx <= 0 || rx >= robotCanvas.width || ry <= 0 || ry >= robotCanvas.height) {
+                        hitDist = r;
+                        hit = true;
+                    }
+
+                    if (hit) break;
+                }
+                hits.push({ angle: rayAngle, dist: hitDist });
+            }
+            return hits;
+        }
+
+        function updateRobotPhysics() {
+            const level = levelsData[currentLevelIdx];
+
+            // Apply Key Teleop
+            if (currentActiveKey) {
+                if (currentActiveKey === 'up') robotState.linearVel = robotState.maxLinearVel;
+                if (currentActiveKey === 'down') robotState.linearVel = -robotState.maxLinearVel * 0.6;
+                if (currentActiveKey === 'left') robotState.angularVel = -robotState.maxAngularVel;
+                if (currentActiveKey === 'right') robotState.angularVel = robotState.maxAngularVel;
+            }
+
+            // Apply Action Goal Autonomous Movement (Level 3)
+            if (robotState.actionActive && robotState.actionTarget) {
+                const dx = robotState.actionTarget.x - robotState.x;
+                const dy = robotState.actionTarget.y - robotState.y;
+                const dist = Math.hypot(dx, dy);
+                const targetAngle = Math.atan2(dy, dx);
+
+                if (dist > 10) {
+                    robotState.angle = targetAngle;
+                    robotState.linearVel = 1.6;
+                    
+                    // Update Action feedback progress line in CLI
+                    if (Math.random() < 0.05) {
+                        appendTerminalOutput(`[ACTION FEEDBACK]: Distance remaining to pose goal: ${dist.toFixed(1)} cm`, 'text-cyan-400 font-mono');
+                    }
+                } else {
+                    robotState.actionActive = false;
+                    robotState.linearVel = 0;
+                    appendTerminalOutput(`[ACTION RESULT]: Goal Succeeded! AMR reached Pose Goal.`, 'text-emerald-400 font-bold bg-emerald-950/40 p-1.5 rounded');
+                    markMissionDone(0);
+                    markMissionDone(1);
+                    playSynthSound('success');
+                }
+            }
+
+            // Update pose
+            robotState.angle += robotState.angularVel;
+            const nextX = robotState.x + Math.cos(robotState.angle) * robotState.linearVel;
+            const nextY = robotState.y + Math.sin(robotState.angle) * robotState.linearVel;
+
+            // Collision check with obstacles
+            let collided = false;
+            level.obstacles.forEach(obs => {
+                if (obs.type === 'gate' && robotState.isGateOpen) return;
+                if (nextX + robotState.radius > obs.x && nextX - robotState.radius < obs.x + obs.w &&
+                    nextY + robotState.radius > obs.y && nextY - robotState.radius < obs.y + obs.h) {
+                    collided = true;
+                }
+            });
+
+            // Canvas Wall boundaries
+            if (nextX - robotState.radius < 0 || nextX + robotState.radius > robotCanvas.width ||
+                nextY - robotState.radius < 0 || nextY + robotState.radius > robotCanvas.height) {
+                collided = true;
+            }
+
+            if (!collided) {
+                robotState.x = nextX;
+                robotState.y = nextY;
+            } else {
+                robotState.linearVel = 0;
+            }
+
+            // Check Goal Zone Reached
+            const distToGoal = Math.hypot(robotState.x - level.goalZone.x, robotState.y - level.goalZone.y);
+            if (distToGoal < level.goalZone.r + robotState.radius) {
+                markMissionDone(level.missions.length - 1);
+                enableNextLevelButton();
+            }
+
+            // Update Telemetry Badge
+            const telemetryEl = document.getElementById('sim-telemetry-badge');
+            if (telemetryEl) {
+                telemetryEl.innerText = `v: ${robotState.linearVel.toFixed(2)} m/s | w: ${robotState.angularVel.toFixed(2)} rad/s | Pos: (${Math.round(robotState.x)}, ${Math.round(robotState.y)})`;
+            }
+        }
+
+        function drawRobotSimulation() {
+            if (!robotCtx) return;
+            const level = levelsData[currentLevelIdx];
+
+            // Clear Canvas
+            robotCtx.fillStyle = '#030712';
+            robotCtx.fillRect(0, 0, robotCanvas.width, robotCanvas.height);
+
+            // Draw Background Grid
+            robotCtx.strokeStyle = '#111827';
+            robotCtx.lineWidth = 1;
+            for (let x = 0; x < robotCanvas.width; x += 30) {
+                robotCtx.beginPath();
+                robotCtx.moveTo(x, 0);
+                robotCtx.lineTo(x, robotCanvas.height);
+                robotCtx.stroke();
+            }
+            for (let y = 0; y < robotCanvas.height; y += 30) {
+                robotCtx.beginPath();
+                robotCtx.moveTo(0, y);
+                robotCtx.lineTo(robotCanvas.width, y);
+                robotCtx.stroke();
+            }
+
+            // Draw Obstacles & Gates
+            level.obstacles.forEach(obs => {
+                if (obs.type === 'gate') {
+                    robotCtx.fillStyle = robotState.isGateOpen ? 'rgba(34, 197, 94, 0.2)' : 'rgba(239, 68, 68, 0.8)';
+                    robotCtx.strokeStyle = robotState.isGateOpen ? '#22c55e' : '#ef4444';
+                    robotCtx.lineWidth = 2;
+                    robotCtx.fillRect(obs.x, obs.y, obs.w, obs.h);
+                    robotCtx.strokeRect(obs.x, obs.y, obs.w, obs.h);
+
+                    robotCtx.fillStyle = '#ffffff';
+                    robotCtx.font = '10px Fira Code';
+                    robotCtx.fillText(robotState.isGateOpen ? 'GATE OPEN' : 'SERVICE GATE LOCKED', obs.x - 20, obs.y - 6);
+                } else {
+                    robotCtx.fillStyle = '#1e293b';
+                    robotCtx.strokeStyle = '#334155';
+                    robotCtx.lineWidth = 1.5;
+                    robotCtx.fillRect(obs.x, obs.y, obs.w, obs.h);
+                    robotCtx.strokeRect(obs.x, obs.y, obs.w, obs.h);
+                }
+            });
+
+            // Draw Goal Zone (Docking Station)
+            robotCtx.fillStyle = 'rgba(16, 185, 129, 0.15)';
+            robotCtx.strokeStyle = '#10b981';
+            robotCtx.lineWidth = 2;
+            robotCtx.beginPath();
+            robotCtx.arc(level.goalZone.x, level.goalZone.y, level.goalZone.r, 0, Math.PI * 2);
+            robotCtx.fill();
+            robotCtx.stroke();
+
+            robotCtx.fillStyle = '#10b981';
+            robotCtx.font = '10px Plus Jakarta Sans, sans-serif';
+            robotCtx.textAlign = 'center';
+            robotCtx.fillText("🎯 ZONA DOKING", level.goalZone.x, level.goalZone.y + 3);
+
+            // Draw LiDAR Rays
+            const scanHits = calculateLiDARScan(level);
+            scanHits.forEach(hit => {
+                const rx = robotState.x + Math.cos(hit.angle) * hit.dist;
+                const ry = robotState.y + Math.sin(hit.angle) * hit.dist;
+
+                robotCtx.beginPath();
+                robotCtx.moveTo(robotState.x, robotState.y);
+                robotCtx.lineTo(rx, ry);
+                robotCtx.strokeStyle = hit.dist < 30 ? 'rgba(239, 68, 68, 0.6)' : 'rgba(0, 240, 255, 0.25)';
+                robotCtx.lineWidth = 1;
+                robotCtx.stroke();
+
+                robotCtx.fillStyle = hit.dist < 30 ? '#ef4444' : '#00f0ff';
+                robotCtx.fillRect(rx - 1.5, ry - 1.5, 3, 3);
+            });
+
+            // Draw Robot Body (AMR)
+            robotCtx.save();
+            robotCtx.translate(robotState.x, robotState.y);
+            robotCtx.rotate(robotState.angle);
+
+            // Wheel tracks
+            robotCtx.fillStyle = '#090d16';
+            robotCtx.fillRect(-10, -robotState.radius - 3, 10, 4);
+            robotCtx.fillRect(-10, robotState.radius - 1, 10, 4);
+
+            // Main Round Chassis
+            robotCtx.fillStyle = '#1e293b';
+            robotCtx.strokeStyle = '#00f0ff';
+            robotCtx.lineWidth = 2.5;
+            robotCtx.beginPath();
+            robotCtx.arc(0, 0, robotState.radius, 0, Math.PI * 2);
+            robotCtx.fill();
+            robotCtx.stroke();
+
+            // LiDAR Turret Center
+            robotCtx.fillStyle = '#0f172a';
+            robotCtx.beginPath();
+            robotCtx.arc(0, 0, 5, 0, Math.PI * 2);
+            robotCtx.fill();
+
+            // Direction Heading Indicator Arrow
+            robotCtx.fillStyle = '#ef4444';
+            robotCtx.beginPath();
+            robotCtx.arc(10, 0, 3, 0, Math.PI * 2);
+            robotCtx.fill();
+
+            robotCtx.restore();
+        }
+
+        function drawNodeGraph() {
+            if (!graphCtx) return;
+            const level = levelsData[currentLevelIdx];
+
+            graphCtx.fillStyle = '#030712';
+            graphCtx.fillRect(0, 0, graphCanvas.width, graphCanvas.height);
+
+            // Draw Topic Connection Lines & Animated Packets
+            level.nodeGraphTopics.forEach(top => {
+                const srcNode = level.nodeGraphNodes.find(n => n.id === top.from);
+                const dstNode = level.nodeGraphNodes.find(n => n.id === top.to);
+                if (!srcNode || !dstNode) return;
+
+                // Draw Link Line
+                graphCtx.beginPath();
+                graphCtx.moveTo(srcNode.x, srcNode.y);
+                graphCtx.lineTo(dstNode.x, dstNode.y);
+                graphCtx.strokeStyle = '#38bdf8';
+                graphCtx.lineWidth = 2;
+                graphCtx.stroke();
+
+                // Topic Badge Label
+                const midX = (srcNode.x + dstNode.x) / 2;
+                const midY = (srcNode.y + dstNode.y) / 2;
+
+                graphCtx.fillStyle = '#0f172a';
+                graphCtx.strokeStyle = '#0284c7';
+                graphCtx.lineWidth = 1;
+                graphCtx.fillRect(midX - 70, midY - 12, 140, 24);
+                graphCtx.strokeRect(midX - 70, midY - 12, 140, 24);
+
+                graphCtx.fillStyle = '#38bdf8';
+                graphCtx.font = '9px Fira Code';
+                graphCtx.textAlign = 'center';
+                graphCtx.fillText(top.name, midX, midY + 3);
+
+                // Animated DDS Message Data Packet
+                const animProgress = (Date.now() % 1500) / 1500;
+                const pktX = srcNode.x + (dstNode.x - srcNode.x) * animProgress;
+                const pktY = srcNode.y + (dstNode.y - srcNode.y) * animProgress;
+
+                graphCtx.fillStyle = '#38bdf8';
+                graphCtx.beginPath();
+                graphCtx.arc(pktX, pktY, 4, 0, Math.PI * 2);
+                graphCtx.fill();
+            });
+
+            // Draw Nodes
+            level.nodeGraphNodes.forEach(node => {
+                graphCtx.fillStyle = '#1e293b';
+                graphCtx.strokeStyle = node.type === 'publisher' ? '#a855f7' : node.type === 'subscriber' ? '#10b981' : '#3b82f6';
+                graphCtx.lineWidth = 2;
+                graphCtx.fillRect(node.x - 60, node.y - 18, 120, 36);
+                graphCtx.strokeRect(node.x - 60, node.y - 18, 120, 36);
+
+                graphCtx.fillStyle = '#ffffff';
+                graphCtx.font = '10px Fira Code';
+                graphCtx.textAlign = 'center';
+                graphCtx.fillText(node.label, node.x, node.y + 4);
+            });
+        }
+
+        /* Combined Main Animation Loop */
+        function mainLoop() {
+            updateRobotPhysics();
+            drawRobotSimulation();
+            drawNodeGraph();
+            requestAnimationFrame(mainLoop);
+        }
+
+        function loadLevel(idx) {
+            currentLevelIdx = idx;
+            const level = levelsData[idx];
+
+            // Reset Robot State
+            robotState.x = level.robotStart.x;
+            robotState.y = level.robotStart.y;
+            robotState.angle = level.robotStart.angle;
+            robotState.linearVel = 0;
+            robotState.angularVel = 0;
+            robotState.isGateOpen = false;
+            robotState.actionActive = false;
+            robotState.actionTarget = null;
+            robotState.maxLinearVel = level.id === 4 ? 0.5 : 1.8; // Reduced speed for Level 4 tuning
+            robotState.tfLaserOffsetAngle = level.id === 5 ? -0.8 : 0;
+
+            // Reset mission statuses
+            level.missions.forEach(m => m.done = false);
+
+            // Update UI Elements
+            document.getElementById('level-badge').innerText = `LEVEL ${level.id}: ${level.title.toUpperCase()}`;
+            document.getElementById('concept-type-tag').innerText = level.conceptTag;
+            document.getElementById('level-title').innerText = level.title;
+            document.getElementById('level-description').innerText = level.description;
+            document.getElementById('level-analogy').innerText = level.analogy;
+            document.getElementById('level-indicator').innerText = `${level.id} / 5`;
+            document.getElementById('btn-next-level').disabled = true;
+
+            renderMissionsChecklist();
+            renderInteractiveToolsPanel();
+            renderQuickCommands();
+            renderLevelStepper();
+
+            appendTerminalOutput(`=== SWITCHED TO LEVEL ${level.id}: ${level.title} ===`, 'text-cyan-400 font-bold mt-2');
+        }
+
+        function renderLevelStepper() {
+            const container = document.getElementById('level-stepper');
+            container.innerHTML = '';
+
+            levelsData.forEach((lvl, idx) => {
+                const btn = document.createElement('button');
+                btn.onclick = () => {
+                    playSynthSound('click');
+                    loadLevel(idx);
+                };
+                btn.className = `p-2 rounded-xl border flex items-center gap-2 transition-all text-left ${
+                    idx === currentLevelIdx 
+                    ? 'bg-cyan-950/60 border-cyan-500/50 text-white shadow-lg' 
+                    : idx < currentLevelIdx 
+                    ? 'bg-emerald-950/30 border-emerald-500/30 text-emerald-400' 
+                    : 'bg-slate-950/40 border-slate-800 text-slate-500'
+                }`;
+
+                btn.innerHTML = `
+                    <div class="w-6 h-6 rounded-lg text-xs font-mono font-bold flex items-center justify-center shrink-0 ${
+                        idx < currentLevelIdx ? 'bg-emerald-500 text-slate-950' : idx === currentLevelIdx ? 'bg-cyan-500 text-slate-950' : 'bg-slate-800 text-slate-400'
+                    }">
+                        ${idx < currentLevelIdx ? '✓' : idx + 1}
+                    </div>
+                    <div class="truncate text-xs font-semibold">
+                        <div class="truncate">${lvl.title}</div>
+                    </div>
+                `;
+                container.appendChild(btn);
+            });
+        }
+
+        function renderMissionsChecklist() {
+            const container = document.getElementById('mission-checklist');
+            container.innerHTML = '';
+            const level = levelsData[currentLevelIdx];
+
+            level.missions.forEach(m => {
+                const li = document.createElement('li');
+                li.className = "flex items-center gap-2";
+                li.innerHTML = `
+                    <span class="w-4 h-4 rounded border flex items-center justify-center text-[10px] shrink-0 ${
+                        m.done ? 'bg-emerald-500 border-emerald-400 text-slate-950 font-bold' : 'border-slate-700 bg-slate-900 text-transparent'
+                    }">✓</span>
+                    <span class="${m.done ? 'line-through text-slate-400' : 'text-slate-200'}">${m.text}</span>
+                `;
+                container.appendChild(li);
+            });
+        }
+
+        function renderInteractiveToolsPanel() {
+            const container = document.getElementById('interactive-tool-panel');
+            container.innerHTML = '';
+            const level = levelsData[currentLevelIdx];
+
+            if (level.id === 1) {
+                container.innerHTML = `
+                    <div class="p-2.5 bg-slate-950 rounded-xl border border-slate-800 space-y-2">
+                        <div class="text-[11px] text-slate-300">Hubungkan Topic Sensor & Teleop:</div>
+                        <button onclick="triggerTopicConnect()" class="w-full py-1.5 bg-cyan-600 hover:bg-cyan-500 text-slate-950 font-bold text-xs rounded-lg transition-all">
+                            🔗 Connect /scan & /cmd_vel Pipeline
+                        </button>
+                    </div>
+                `;
+            } else if (level.id === 2) {
+                container.innerHTML = `
+                    <div class="p-2.5 bg-slate-950 rounded-xl border border-slate-800 space-y-2">
+                        <div class="text-[11px] text-slate-300">Panggil ROS 2 Service Gerbang:</div>
+                        <button onclick="callGateService()" class="w-full py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-lg transition-all">
+                            ⚡ Service Call: /trigger_gate
+                        </button>
+                    </div>
+                `;
+            } else if (level.id === 3) {
+                container.innerHTML = `
+                    <div class="p-2.5 bg-slate-950 rounded-xl border border-slate-800 space-y-2">
+                        <div class="text-[11px] text-slate-300">Action Goal Navigation (Nav2):</div>
+                        <div class="grid grid-cols-2 gap-2">
+                            <button onclick="sendNavActionGoal()" class="py-1.5 bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold text-xs rounded-lg transition-all">
+                                🚀 Send Goal Pose
+                            </button>
+                            <button onclick="cancelNavActionGoal()" class="py-1.5 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs rounded-lg transition-all">
+                                🛑 Cancel Goal
+                            </button>
+                        </div>
+                    </div>
+                `;
+            } else if (level.id === 4) {
+                container.innerHTML = `
+                    <div class="p-2.5 bg-slate-950 rounded-xl border border-slate-800 space-y-2">
+                        <div class="flex justify-between text-[11px]">
+                            <span class="text-slate-300">Parameter max_linear_vel:</span>
+                            <span id="param-val-label" class="text-cyan-400 font-bold">${robotState.maxLinearVel.toFixed(1)} m/s</span>
+                        </div>
+                        <input type="range" min="0.5" max="3.0" step="0.1" value="${robotState.maxLinearVel}" 
+                            oninput="updateMaxVelParam(this.value)" class="w-full accent-cyan-500">
+                    </div>
+                `;
+            } else if (level.id === 5) {
+                container.innerHTML = `
+                    <div class="p-2.5 bg-slate-950 rounded-xl border border-slate-800 space-y-2">
+                        <div class="flex justify-between text-[11px]">
+                            <span class="text-slate-300">TF2 Laser Frame Yaw Offset:</span>
+                            <span id="tf-val-label" class="text-purple-400 font-bold">${Math.round(robotState.tfLaserOffsetAngle * (180/Math.PI))}°</span>
+                        </div>
+                        <input type="range" min="-1.5" max="1.5" step="0.1" value="${robotState.tfLaserOffsetAngle}" 
+                            oninput="updateTFYawOffset(this.value)" class="w-full accent-purple-500">
+                    </div>
+                `;
+            }
+        }
+
+        function triggerTopicConnect() {
+            playSynthSound('success');
+            appendTerminalOutput(`[ROS2 TOPIC]: Connected /scan subscriber and /cmd_vel publisher successfully.`, 'text-emerald-400 font-mono');
+            markMissionDone(0);
+        }
+
+        function callGateService() {
+            playSynthSound('success');
+            robotState.isGateOpen = true;
+            appendTerminalOutput(`[SERVICE CALL]: /trigger_gate -> Response: {success: true, message: "Security Gate Unlocked"}`, 'text-emerald-400 font-bold bg-emerald-950/40 p-1.5 rounded');
+            markMissionDone(1);
+        }
+
+        function sendNavActionGoal() {
+            playSynthSound('success');
+            robotState.actionActive = true;
+            robotState.actionTarget = { x: levelsData[currentLevelIdx].goalZone.x, y: levelsData[currentLevelIdx].goalZone.y };
+            appendTerminalOutput(`[ACTION GOAL]: Sent Nav2 Goal Pose (x: 500, y: 80). Action Goal Accepted!`, 'text-cyan-400 font-mono');
+            markMissionDone(0);
+        }
+
+        function cancelNavActionGoal() {
+            playSynthSound('error');
+            robotState.actionActive = false;
+            robotState.linearVel = 0;
+            appendTerminalOutput(`[ACTION CANCEL]: Goal Canceled by Action Client!`, 'text-rose-400 font-mono');
+        }
+
+        function updateMaxVelParam(val) {
+            robotState.maxLinearVel = parseFloat(val);
+            document.getElementById('param-val-label').innerText = `${robotState.maxLinearVel.toFixed(1)} m/s`;
+            if (robotState.maxLinearVel >= 2.4) {
+                markMissionDone(1);
+            }
+        }
+
+        function updateTFYawOffset(val) {
+            robotState.tfLaserOffsetAngle = parseFloat(val);
+            const deg = Math.round(robotState.tfLaserOffsetAngle * (180 / Math.PI));
+            document.getElementById('tf-val-label').innerText = `${deg}°`;
+            if (Math.abs(robotState.tfLaserOffsetAngle) < 0.15) {
+                markMissionDone(1);
+            }
+        }
+
+        function markMissionDone(idx) {
+            const level = levelsData[currentLevelIdx];
+            if (level.missions[idx] && !level.missions[idx].done) {
+                level.missions[idx].done = true;
+                playerXP += 100;
+                document.getElementById('player-xp').innerText = `${playerXP} XP`;
+                renderMissionsChecklist();
+                playSynthSound('success');
+            }
+        }
+
+        function enableNextLevelButton() {
+            document.getElementById('btn-next-level').disabled = false;
+        }
+
+        function nextLevel() {
+            if (currentLevelIdx < levelsData.length - 1) {
+                playSynthSound('level');
+                loadLevel(currentLevelIdx + 1);
+            } else {
+                showCompletionModal();
+            }
+        }
+
+        function renderQuickCommands() {
+            const container = document.getElementById('quick-cmd-palette');
+            container.innerHTML = '';
+            const level = levelsData[currentLevelIdx];
+
+            level.quickCommands.forEach(cmd => {
+                const btn = document.createElement('button');
+                btn.className = "px-2.5 py-1 bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-lg text-slate-300 font-mono text-[11px] transition-colors flex items-center gap-1.5";
+                btn.onclick = () => {
+                    document.getElementById('terminal-input').value = cmd;
+                    playSynthSound('click');
+                };
+                btn.innerHTML = `<span class="text-cyan-400">$</span> <span>${cmd}</span>`;
+                container.appendChild(btn);
+            });
+        }
+
+        function appendTerminalOutput(text, styleClass = 'text-slate-300') {
+            const screen = document.getElementById('terminal-screen');
+            const line = document.createElement('div');
+            line.className = styleClass;
+            line.innerText = text;
+            screen.appendChild(line);
+            screen.scrollTop = screen.scrollHeight;
+        }
+
+        function handleTerminalKeyPress(e) {
+            if (e.key === 'Enter') submitTerminalInput();
+            else playSynthSound('click');
+        }
+
+        function submitTerminalInput() {
+            const inputEl = document.getElementById('terminal-input');
+            const cmd = inputEl.value.trim();
+            if (!cmd) return;
+
+            appendTerminalOutput(`ros2@amr:~$ ${cmd}`, 'text-cyan-400 font-bold');
+            inputEl.value = '';
+
+            const level = levelsData[currentLevelIdx];
+
+            // CLI Parser Simulation
+            if (cmd === 'ros2 node list') {
+                const nodesList = level.nodeGraphNodes.map(n => n.label).join('\n');
+                appendTerminalOutput(nodesList, 'text-slate-300 font-mono');
+                markMissionDone(0);
+            } else if (cmd === 'ros2 topic list') {
+                const topicsList = level.nodeGraphTopics.map(t => `${t.name} [${t.msgType}]`).join('\n') || '/scan [sensor_msgs/msg/LaserScan]\n/cmd_vel [geometry_msgs/msg/Twist]';
+                appendTerminalOutput(topicsList, 'text-slate-300 font-mono');
+                markMissionDone(0);
+            } else if (cmd.startsWith('ros2 service call')) {
+                callGateService();
+            } else if (cmd.startsWith('ros2 param set')) {
+                if (level.id === 4) updateMaxVelParam(2.5);
+                if (level.id === 5) updateTFYawOffset(0.0);
+                appendTerminalOutput(`Set parameter successfully.`, 'text-emerald-400 font-mono');
+            } else {
+                appendTerminalOutput(`Executing command: ${cmd}... Done.`, 'text-slate-400 font-mono');
+            }
+        }
+
+        function resetRobotPosition() {
+            const level = levelsData[currentLevelIdx];
+            robotState.x = level.robotStart.x;
+            robotState.y = level.robotStart.y;
+            robotState.angle = level.robotStart.angle;
+            robotState.linearVel = 0;
+            robotState.angularVel = 0;
+        }
+
+        function showHintModal() {
+            const level = levelsData[currentLevelIdx];
+            document.getElementById('hint-modal-text').innerText = level.hint;
+            document.getElementById('hint-modal').classList.remove('hidden');
+        }
+
+        function closeHintModal() {
+            document.getElementById('hint-modal').classList.add('hidden');
+        }
+
+        function showCompletionModal() {
+            playSynthSound('level');
+            document.getElementById('final-xp-score').innerText = `${playerXP} XP`;
+            document.getElementById('completion-modal').classList.remove('hidden');
+        }
+
+        function resetWholeGame() {
+            playerXP = 0;
+            document.getElementById('player-xp').innerText = '0 XP';
+            document.getElementById('completion-modal').classList.add('hidden');
+            loadLevel(0);
+        }
+
+        window.onload = () => {
+            loadLevel(0);
+            requestAnimationFrame(mainLoop);
+        };
+    </script>
+</body>
+</html>
